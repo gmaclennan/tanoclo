@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- feat: publish per-valve heat demand, zone call-for-heat latch and per-circuit demand / call for heat to MQTT with HA discovery
+
 ## [0.5.0] - 2026-10-08
 
 - fix: zone overlays, setpoint handling and bindings
