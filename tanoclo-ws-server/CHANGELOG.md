@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-24
+
+- feat(telemetry): upsert and merge circuit measurements
+- fix(mesh): recover link loss fast and pace bridge downlink
+- fix(frontend): format supply temp times in home timezone
+- chore: update node to v26
+- chore: update node_modules
+
 ## [0.8.3] - 2026-10-19
 
 - fix(cmd-api): drain the REST API child's sleepy-downlink queue on device wake
