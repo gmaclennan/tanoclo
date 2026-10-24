@@ -20,3 +20,4 @@ test_config.json
 .default.json
 *scratch*
 /.ota/
+.vitest/

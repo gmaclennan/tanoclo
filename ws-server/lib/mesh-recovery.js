@@ -73,6 +73,47 @@ async function probeDevice(deviceId) {
 }
 
 /**
+ * Pushes device configuration via CON PUT d/config to trigger firmware re-sync and error clear.
+ */
+async function pushDeviceRecoveryConfig(deviceId) {
+    if (!_commandApi) return null;
+    try {
+        let payload = null;
+        try {
+            const dbUtils = require('./db-utils');
+            if (typeof dbUtils.buildDeviceConfigTLV === 'function') {
+                payload = await dbUtils.buildDeviceConfigTLV(deviceId);
+            }
+        } catch (e) {
+            _log('debug', `[mesh-recovery] Could not build device config TLV for ${deviceId}: ${e.message}`);
+        }
+        if (!payload || payload.length === 0) return null;
+
+        const extraOptions = [
+            { num: 7, value: Buffer.from([0xff, 0xff]) },
+            { num: 12, value: Buffer.from([0x2a]) }
+        ];
+        const mid = await _commandApi.internalPushViabridge(
+            deviceId,
+            coap.CODE_PUT,
+            'd/config',
+            payload,
+            null,
+            extraOptions,
+            true,
+            coap.TYPE_CON,
+            null,
+            'mesh:recovery_config'
+        );
+        _log('info', `[mesh-recovery] Pushed recovery config to ${deviceId} via CON PUT d/config (MID=0x${mid.toString(16).toUpperCase()})`);
+        return mid;
+    } catch (e) {
+        _log('debug', `[mesh-recovery] Failed to push recovery config to ${deviceId}: ${e.message}`);
+        return null;
+    }
+}
+
+/**
  * Triggers soft reboot of a device via POST d/reboot.
  */
 async function rebootDevice(deviceId) {
@@ -199,6 +240,7 @@ async function onDeviceError(homeId, deviceId, flags) {
         rec.lastProbeTs = now;
         rec.probeAttempts++;
         await probeDevice(deviceId);
+        await pushDeviceRecoveryConfig(deviceId);
     }
 }
 
@@ -274,6 +316,7 @@ async function checkFallbackEscalation() {
             rec.lastProbeTs = now;
             rec.probeAttempts++;
             await probeDevice(deviceId);
+            await pushDeviceRecoveryConfig(deviceId);
         }
     }
 }
@@ -318,6 +361,7 @@ async function runProactiveKeepAlive() {
 module.exports = {
     init,
     probeDevice,
+    pushDeviceRecoveryConfig,
     rebootDevice,
     onZoneFallback,
     onDeviceError,

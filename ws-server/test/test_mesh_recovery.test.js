@@ -114,4 +114,21 @@ describe('mesh-recovery module', () => {
         expect(pushedCommands.length).toBe(1);
         expect(pushedCommands[0].deviceId).toBe(TEST_VA_SERIAL);
     });
+
+    test('pushDeviceRecoveryConfig pushes CON PUT d/config with recovery commandLabel', async () => {
+        const dbUtils = require('../lib/db-utils');
+        const spy = vi.spyOn(dbUtils, 'buildDeviceConfigTLV').mockResolvedValue(Buffer.from([0x01, 0x02, 0x03]));
+
+        const mid = await meshRecovery.pushDeviceRecoveryConfig(TEST_VA_SERIAL);
+        expect(mid).toBe(0x1234);
+        expect(pushedCommands.length).toBe(1);
+        expect(pushedCommands[0].deviceId).toBe(TEST_VA_SERIAL);
+        expect(pushedCommands[0].code).toBe(coap.CODE_PUT);
+        expect(pushedCommands[0].path).toBe('d/config');
+        expect(pushedCommands[0].commandLabel).toBe('mesh:recovery_config');
+        expect(pushedCommands[0].type).toBe(coap.TYPE_CON);
+
+        spy.mockRestore();
+    });
 });
+

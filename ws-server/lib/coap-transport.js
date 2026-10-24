@@ -27,6 +27,11 @@ const _deviceLastSeen = new Map(); // deviceId -> timestamp
 const SLEEPY_AWAKE_WINDOW_MS = 4000;
 const QUEUE_TTL_MS = 2 * 60 * 60 * 1000;
 
+// Per-bridge downlink burst pacing queue: prevents 802.15.4 CSL preamble collisions and 6LoWPAN queue overflow
+const _bridgePacingQueues = new Map(); // bridgeId -> Array of queued items
+const _bridgePacingActive = new Map(); // bridgeId -> boolean
+let _downlinkPacingMs = 200;
+
 const RETRY_INTERVALS = [6000, 13000, 26000, 50000, 90000];
 const QUERY_TIMEOUT_MS = 5000;
 const MAX_QUERY_RETRIES = 2;
@@ -88,23 +93,17 @@ function findBridgeForHome(homeId) {
     return null;
 }
 
-function sendViaBridge(bridgeId, bridgeClient, targetIpv6, targetPort, coapBytes, commandLabel) {
-    const wsFrame = wsBridge.build({
-        direction: 'server_to_client',
-        ipv6: targetIpv6,
-        udpPort: targetPort || 5683,
-        fieldA: 4,
-        fieldB: 2,
-        fieldC: 5,
-        coapBytes
-    });
+function _dispatchDownlinkFrame(item) {
+    const { bridgeId, wsFrame, coapBytes, commandLabel, targetIpv6 } = item;
     _log('debug', `[cmd-api] CoAP TX hex: ${coapBytes.toString('hex')}`);
     _log('debug', `[cmd-api] Raw TX hex: ${wsFrame.toString('hex')}`);
 
     const coapPath = coap.uriPath(coap.parse(coapBytes)) || commandLabel || '';
     commandLog.logWsCommand(bridgeId, commandLabel || 'unlabeled', coapPath || 'unlabeled', coapBytes, wsFrame);
 
-    _sendFn(bridgeId, wsFrame);
+    if (typeof _sendFn === 'function') {
+        _sendFn(bridgeId, wsFrame);
+    }
     metrics.inc('commands_sent');
 
     if (coapBytes.length >= 4) {
@@ -137,6 +136,59 @@ function sendViaBridge(bridgeId, bridgeClient, targetIpv6, targetPort, coapBytes
                 _commandTracker.delete(firstKey);
             }
         }
+    }
+}
+
+function _processNextPacedDownlink(bridgeId) {
+    const queue = _bridgePacingQueues.get(bridgeId);
+    if (!queue || queue.length === 0) {
+        _bridgePacingActive.set(bridgeId, false);
+        return;
+    }
+
+    _bridgePacingActive.set(bridgeId, true);
+    const nextItem = queue.shift();
+    _dispatchDownlinkFrame(nextItem);
+
+    const timer = setTimeout(() => {
+        _processNextPacedDownlink(bridgeId);
+    }, _downlinkPacingMs);
+    if (timer.unref) timer.unref();
+}
+
+function sendViaBridge(bridgeId, bridgeClient, targetIpv6, targetPort, coapBytes, commandLabel) {
+    const wsFrame = wsBridge.build({
+        direction: 'server_to_client',
+        ipv6: targetIpv6,
+        udpPort: targetPort || 5683,
+        fieldA: 4,
+        fieldB: 2,
+        fieldC: 5,
+        coapBytes
+    });
+
+    const item = { bridgeId, bridgeClient, targetIpv6, targetPort, coapBytes, commandLabel, wsFrame };
+
+    if (!bridgeId || _downlinkPacingMs <= 0) {
+        _dispatchDownlinkFrame(item);
+        return;
+    }
+
+    if (!_bridgePacingQueues.has(bridgeId)) {
+        _bridgePacingQueues.set(bridgeId, []);
+    }
+    const queue = _bridgePacingQueues.get(bridgeId);
+
+    if (!_bridgePacingActive.get(bridgeId)) {
+        _bridgePacingActive.set(bridgeId, true);
+        _dispatchDownlinkFrame(item);
+        const timer = setTimeout(() => {
+            _processNextPacedDownlink(bridgeId);
+        }, _downlinkPacingMs);
+        if (timer.unref) timer.unref();
+    } else {
+        queue.push(item);
+        _log('debug', `[cmd-api] Downlink pacing: Queued frame for ${targetIpv6} on bridge ${bridgeId} (queue length: ${queue.length})`);
     }
 }
 
@@ -485,5 +537,14 @@ module.exports = {
     isDeviceAwake,
     queueSleepyDownlink,
     drainSleepyDownlink,
-    getSleepyQueue
+    getSleepyQueue,
+    getBridgePacingQueue: (bridgeId) => _bridgePacingQueues.get(bridgeId) || [],
+    clearBridgePacingQueue: (bridgeId) => {
+        if (bridgeId) _bridgePacingQueues.delete(bridgeId);
+        else _bridgePacingQueues.clear();
+        if (bridgeId) _bridgePacingActive.delete(bridgeId);
+        else _bridgePacingActive.clear();
+    },
+    setDownlinkPacingMs: (ms) => { _downlinkPacingMs = ms; },
+    getDownlinkPacingMs: () => _downlinkPacingMs
 };
