@@ -38,14 +38,22 @@ function getInterpolatedValue(arr, ts, valKey, defaultVal, lastIdxObj) {
     }
 
     if (i >= arr.length) {
-        const lp = arr[arr.length - 1];
-        lastIdxObj.idx = arr.length - 1;
-        return (lp[valKey] !== null && lp[valKey] !== undefined) ? parseFloat(lp[valKey]) : defaultVal;
+        for (let k = arr.length - 1; k >= 0; k--) {
+            if (arr[k][valKey] !== null && arr[k][valKey] !== undefined) {
+                lastIdxObj.idx = arr.length - 1;
+                return parseFloat(arr[k][valKey]);
+            }
+        }
+        return defaultVal;
     }
 
     if (i === 0) {
-        const fp = arr[0];
-        return (fp[valKey] !== null && fp[valKey] !== undefined) ? parseFloat(fp[valKey]) : defaultVal;
+        for (let k = 0; k < arr.length; k++) {
+            if (arr[k][valKey] !== null && arr[k][valKey] !== undefined) {
+                return parseFloat(arr[k][valKey]);
+            }
+        }
+        return defaultVal;
     }
 
     const p1 = arr[i - 1];
@@ -57,13 +65,21 @@ function getInterpolatedValue(arr, ts, valKey, defaultVal, lastIdxObj) {
     const v1_raw = p1[valKey];
     const v2_raw = p2[valKey];
 
-    const v1 = (v1_raw !== null && v1_raw !== undefined) ? parseFloat(v1_raw) : defaultVal;
-    const v2 = (v2_raw !== null && v2_raw !== undefined) ? parseFloat(v2_raw) : defaultVal;
+    const hasV1 = v1_raw !== null && v1_raw !== undefined;
+    const hasV2 = v2_raw !== null && v2_raw !== undefined;
+
+    lastIdxObj.idx = i - 1;
+
+    if (!hasV1 && !hasV2) return defaultVal;
+    if (hasV1 && !hasV2) return parseFloat(v1_raw);
+    if (!hasV1 && hasV2) return parseFloat(v2_raw);
+
+    const v1 = parseFloat(v1_raw);
+    const v2 = parseFloat(v2_raw);
 
     if (t1 === t2) return v2;
 
     const fraction = (ts - t1) / (t2 - t1);
-    lastIdxObj.idx = i - 1;
     return v1 + (v2 - v1) * fraction;
 }
 
@@ -93,6 +109,28 @@ router.get('/:homeId/tanoclo/boiler/raw', async (req, res) => {
 
         const row = rows[0];
         delete row.last_config_json;
+
+        // Fall back to latest non-null metrics from circuit_measurements if missing in heating_systems
+        const hvacCols = [
+            'field_044c', 'field_044d', 'field_044e', 'field_044f', 'field_0450',
+            'field_0452', 'field_0457', 'field_045a', 'field_045e', 'field_0460', 'field_0462'
+        ];
+        const hasMissingHvac = hvacCols.some(col => row[col] === null || row[col] === undefined);
+        if (hasMissingHvac) {
+            const [latestMeas] = await pool.execute(
+                'SELECT * FROM circuit_measurements WHERE home_id = ? ORDER BY id DESC LIMIT 1',
+                [homeId]
+            );
+            if (latestMeas.length > 0) {
+                const m = latestMeas[0];
+                for (const col of hvacCols) {
+                    if ((row[col] === null || row[col] === undefined) && m[col] !== null && m[col] !== undefined) {
+                        row[col] = m[col];
+                    }
+                }
+            }
+        }
+
         try {
             const tlvBuf = await dbUtils.buildHvacConfigTLV(homeId);
             row.last_config_decoded = (tlvBuf && tlvBuf.length > 0) ? tlv.decode(tlvBuf).fields : null;
@@ -217,6 +255,25 @@ router.get('/:homeId/tanoclo/circuits', async (req, res) => {
             'SELECT * FROM heating_circuits WHERE home_id = ?',
             [homeId]
         );
+        const circuitCols = ['field_4040', 'field_4000', 'field_4080', 'field_2090', 'field_2040'];
+        for (const row of rows) {
+            delete row.last_config_json;
+            const hasMissing = circuitCols.some(col => row[col] === null || row[col] === undefined);
+            if (hasMissing) {
+                const [cMeas] = await pool.execute(
+                    'SELECT * FROM circuit_measurements WHERE home_id = ? AND circuit_number = ? ORDER BY id DESC LIMIT 1',
+                    [homeId, row.number]
+                );
+                if (cMeas.length > 0) {
+                    const m = cMeas[0];
+                    for (const col of circuitCols) {
+                        if ((row[col] === null || row[col] === undefined) && m[col] !== null && m[col] !== undefined) {
+                            row[col] = m[col];
+                        }
+                    }
+                }
+            }
+        }
         res.json(rows);
     } catch (err) {
         _log('error', `Error fetching circuits: ${err.message}`);
@@ -933,6 +990,9 @@ router.get('/:homeId/tanoclo/circuits/:circuitId/dayReport', async (req, res) =>
         const modulationPoints = [];
         const demandPoints = [];
         const waterPressurePoints = [];
+        const exhaustTempPoints = [];
+        const dhwTempPoints = [];
+        const dhwFlowRatePoints = [];
 
         const idxFlow = { idx: 0 };
         const idxReturn = { idx: 0 };
@@ -942,6 +1002,9 @@ router.get('/:homeId/tanoclo/circuits/:circuitId/dayReport', async (req, res) =>
         const idxMod = { idx: 0 };
         const idxDemand = { idx: 0 };
         const idxPress = { idx: 0 };
+        const idxExhaust = { idx: 0 };
+        const idxDhw = { idx: 0 };
+        const idxDhwFlow = { idx: 0 };
 
         const zoneIndices = {};
         const zoneHeatRequests = mappedZones.map(z => {
@@ -972,6 +1035,9 @@ router.get('/:homeId/tanoclo/circuits/:circuitId/dayReport', async (req, res) =>
             const dem = Math.round(getInterpolatedValue(cRows, t, 'field_4080', 0, idxDemand));
             const pressMbar = getInterpolatedValue(cRows, t, 'field_0460', 0, idxPress);
             const pressBar = Math.round(((pressMbar & 0xffff) / 1000.0) * 100) / 100;
+            const exh = Math.round(getInterpolatedValue(cRows, t, 'field_044e', 0, idxExhaust) * 10) / 10;
+            const dhw = Math.round(getInterpolatedValue(cRows, t, 'field_045a', 0, idxDhw) * 10) / 10;
+            const dhwFlow = Math.round(getInterpolatedValue(cRows, t, 'field_045e', 0, idxDhwFlow) * 10) / 10;
 
             if (flow > 0) {
                 if (minFlow === null || flow < minFlow) minFlow = flow;
@@ -994,6 +1060,9 @@ router.get('/:homeId/tanoclo/circuits/:circuitId/dayReport', async (req, res) =>
             modulationPoints.push({ timestamp: tsIso, value: mod });
             demandPoints.push({ timestamp: tsIso, value: dem });
             waterPressurePoints.push({ timestamp: tsIso, value: pressBar > 0 ? pressBar : null });
+            exhaustTempPoints.push({ timestamp: tsIso, value: exh > 0 ? exh : null });
+            dhwTempPoints.push({ timestamp: tsIso, value: dhw > 0 ? dhw : null });
+            dhwFlowRatePoints.push({ timestamp: tsIso, value: dhwFlow > 0 ? dhwFlow : null });
 
             // Zones demand resample
             zoneHeatRequests.forEach(zEntry => {
@@ -1044,7 +1113,10 @@ router.get('/:homeId/tanoclo/circuits/:circuitId/dayReport', async (req, res) =>
                 referenceTemperature: { dataPoints: refTempPoints },
                 modulation: { min: minMod, max: maxMod, dataPoints: modulationPoints },
                 circuitDemand: { min: minDemand, max: maxDemand, dataPoints: demandPoints },
-                waterPressure: { dataPoints: waterPressurePoints }
+                waterPressure: { dataPoints: waterPressurePoints },
+                exhaustTemperature: { dataPoints: exhaustTempPoints },
+                dhwTemperature: { dataPoints: dhwTempPoints },
+                dhwFlowRate: { dataPoints: dhwFlowRatePoints }
             },
             flameState: {
                 timeSeriesType: 'dataIntervals',

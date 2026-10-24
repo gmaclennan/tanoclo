@@ -23112,7 +23112,12 @@ CREATE TABLE `circuit_measurements` (
   `field_0450` decimal(5,2) DEFAULT NULL COMMENT 'control_setpoint',
   `field_0452` int(11) DEFAULT NULL COMMENT 'relative_modulation',
   `field_0457` tinyint(4) DEFAULT NULL COMMENT 'flame_active',
-  `field_0460` int(11) DEFAULT NULL COMMENT 'water_pressure_mbar'
+  `field_0460` int(11) DEFAULT NULL COMMENT 'water_pressure_mbar',
+  `field_044e` decimal(5,2) DEFAULT NULL COMMENT 'ot_exhaust_temperature',
+  `field_045a` decimal(5,2) DEFAULT NULL COMMENT 'ot_dhw_temperature',
+  `field_045e` decimal(5,2) DEFAULT NULL COMMENT 'ot_dhw_flow_rate',
+  `field_044f` decimal(5,2) DEFAULT NULL COMMENT 'ot_outside_temperature',
+  `field_0462` decimal(5,2) DEFAULT NULL COMMENT 'ot_ch_water_pressure_bar'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `device_measurements` (
@@ -23197,6 +23202,11 @@ CREATE TABLE `heating_systems` (
   `field_0468` int(11) DEFAULT NULL,
   `field_0464` int(11) DEFAULT NULL,
   `field_0465` int(11) DEFAULT NULL,
+  `field_044e` decimal(5,2) DEFAULT NULL,
+  `field_045a` decimal(5,2) DEFAULT NULL,
+  `field_045e` decimal(5,2) DEFAULT NULL,
+  `field_044f` decimal(5,2) DEFAULT NULL,
+  `field_0462` decimal(5,2) DEFAULT NULL,
   `field_0481` varchar(60) DEFAULT NULL,
   `hvac_updated_at` varchar(64) DEFAULT NULL,
   `last_config_json` text DEFAULT NULL,

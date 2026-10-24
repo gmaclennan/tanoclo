@@ -582,13 +582,13 @@ export default function BoilerCircuitsSettings() {
           </Card>
           <Card style={{ padding: '1.25rem', display: 'flex', justifyContent: 'center' }}>
             {renderCircularGauge(
-              boilerRaw.last_config_decoded?.['0x044e'] ? parseFloat(boilerRaw.last_config_decoded['0x044e']) : null,
+              boilerRaw.field_044e ? parseFloat(boilerRaw.field_044e) : (boilerRaw.last_config_decoded?.['0x044e'] ? parseFloat(boilerRaw.last_config_decoded['0x044e']) : null),
               20, 150, t('tanoclo_ex.flue_exhaust_temp'), '°', 'hsl(0, 75%, 55%)'
             )}
           </Card>
           <Card style={{ padding: '1.25rem', display: 'flex', justifyContent: 'center' }}>
             {renderCircularGauge(
-              boilerRaw.last_config_decoded?.['0x045a'] ? parseFloat(boilerRaw.last_config_decoded['0x045a']) : null,
+              boilerRaw.field_045a ? parseFloat(boilerRaw.field_045a) : (boilerRaw.last_config_decoded?.['0x045a'] ? parseFloat(boilerRaw.last_config_decoded['0x045a']) : null),
               10, 70, t('tanoclo_ex.dhw_temperature'), '°', 'var(--secondary)'
             )}
           </Card>
@@ -600,15 +600,15 @@ export default function BoilerCircuitsSettings() {
           </Card>
           <Card style={{ padding: '1.25rem', display: 'flex', justifyContent: 'center' }}>
             {renderCircularGauge(
-              boilerRaw.field_0460 ? (boilerRaw.field_0460 & 0xffff) / 1000.0 : null,
+              boilerRaw.field_0462 ? parseFloat(boilerRaw.field_0462) : (boilerRaw.field_0460 ? (boilerRaw.field_0460 & 0xffff) / 1000.0 : null),
               0, 4, t('tanoclo_ex.water_pressure'), ' bar',
-              (boilerRaw.field_0460 & 0xffff) / 1000.0 < 1.0 ? 'var(--danger)' : 'var(--secondary)'
+              (parseFloat(boilerRaw.field_0462 || ((boilerRaw.field_0460 & 0xffff) / 1000.0) || 0) < 1.0 ? 'var(--danger)' : 'var(--secondary)')
             )}
           </Card>
-          {boilerRaw.last_config_decoded?.['0x045e'] !== undefined && (
+          {(boilerRaw.field_045e !== null && boilerRaw.field_045e !== undefined || boilerRaw.last_config_decoded?.['0x045e'] !== undefined) && (
             <Card style={{ padding: '1.25rem', display: 'flex', justifyContent: 'center' }}>
               {renderCircularGauge(
-                parseFloat(boilerRaw.last_config_decoded['0x045e']),
+                parseFloat(boilerRaw.field_045e ?? boilerRaw.last_config_decoded['0x045e']),
                 0, 15, t('tanoclo_ex.dhw_flow_rate', 'DHW Flow Rate'), ' L/m', 'var(--secondary)'
               )}
             </Card>

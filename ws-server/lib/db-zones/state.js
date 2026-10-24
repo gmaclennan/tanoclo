@@ -20,7 +20,8 @@ const ALLOWED_ZONE_DEVICE_CONFIG_COLS = new Set(['field_0140', 'field_0149', 'fi
 const ALLOWED_CIRCUIT_STATE_COLS = new Set(['field_4040', 'field_4000', 'field_4080', 'field_2090']);
 const ALLOWED_HEATING_SYSTEM_COLS = new Set([
     'home_id', 'hvac_updated_at', 'hvac_etag',
-    'field_044c', 'field_044d', 'field_0450', 'field_0458', 'field_0457', 'field_0452',
+    'field_044c', 'field_044d', 'field_044e', 'field_044f', 'field_0450', 'field_0458', 'field_0457', 'field_0452',
+    'field_045a', 'field_045e',
     'field_0460', 'field_0461', 'field_0462', 'field_0463', 'field_0464', 'field_0465',
     'field_0466', 'field_0467', 'field_0468', 'field_046c', 'field_046d', 'field_046f',
     'field_0471', 'field_0481', 'field_045b', 'field_015d',
@@ -655,6 +656,15 @@ async function insertCircuitMeasurement(homeId, circuitNumber, circuitFields = {
     const p = getPool();
     const now = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
 
+    let prev = null;
+    try {
+        const [prevRows] = await p.execute(
+            'SELECT * FROM circuit_measurements WHERE home_id=? AND circuit_number=? ORDER BY id DESC LIMIT 1',
+            [homeId, circuitNumber]
+        );
+        if (prevRows.length > 0) prev = prevRows[0];
+    } catch (e) {}
+
     let cRow = null;
     try {
         const [cRows] = await p.execute(
@@ -667,35 +677,68 @@ async function insertCircuitMeasurement(homeId, circuitNumber, circuitFields = {
     let hRow = null;
     try {
         const [hRows] = await p.execute(
-            'SELECT field_044c, field_044d, field_0450, field_0452, field_0457, field_0460 FROM heating_systems WHERE home_id=? LIMIT 1',
+            'SELECT field_044c, field_044d, field_044e, field_044f, field_0450, field_0452, field_0457, field_045a, field_045e, field_0460, field_0462 FROM heating_systems WHERE home_id=? LIMIT 1',
             [homeId]
         );
         if (hRows.length > 0) hRow = hRows[0];
     } catch (e) {}
 
-    const targetTemp = (circuitFields['0x4000'] !== undefined ? circuitFields['0x4000'] : (circuitFields.field_4000 !== undefined ? circuitFields.field_4000 : cRow?.field_4000)) ?? null;
-    const refTemp = (circuitFields['0x4040'] !== undefined ? circuitFields['0x4040'] : (circuitFields.field_4040 !== undefined ? circuitFields.field_4040 : cRow?.field_4040)) ?? null;
-    const demand = (circuitFields['0x4080'] !== undefined ? circuitFields['0x4080'] : (circuitFields.field_4080 !== undefined ? circuitFields.field_4080 : cRow?.field_4080)) ?? null;
-    const mode = (circuitFields['0x2090'] !== undefined ? circuitFields['0x2090'] : (circuitFields.field_2090 !== undefined ? circuitFields.field_2090 : cRow?.field_2090)) ?? null;
-    const dhwMaxFlow = (circuitFields['0x2040'] !== undefined ? circuitFields['0x2040'] : (circuitFields.field_2040 !== undefined ? circuitFields.field_2040 : cRow?.field_2040)) ?? null;
+    const targetTemp = (circuitFields['0x4000'] !== undefined ? circuitFields['0x4000'] : (circuitFields.field_4000 !== undefined ? circuitFields.field_4000 : (prev?.field_4000 ?? cRow?.field_4000))) ?? null;
+    const refTemp = (circuitFields['0x4040'] !== undefined ? circuitFields['0x4040'] : (circuitFields.field_4040 !== undefined ? circuitFields.field_4040 : (prev?.field_4040 ?? cRow?.field_4040))) ?? null;
+    const demand = (circuitFields['0x4080'] !== undefined ? circuitFields['0x4080'] : (circuitFields.field_4080 !== undefined ? circuitFields.field_4080 : (prev?.field_4080 ?? cRow?.field_4080))) ?? null;
+    const mode = (circuitFields['0x2090'] !== undefined ? circuitFields['0x2090'] : (circuitFields.field_2090 !== undefined ? circuitFields.field_2090 : (prev?.field_2090 ?? cRow?.field_2090))) ?? null;
+    const dhwMaxFlow = (circuitFields['0x2040'] !== undefined ? circuitFields['0x2040'] : (circuitFields.field_2040 !== undefined ? circuitFields.field_2040 : (prev?.field_2040 ?? cRow?.field_2040))) ?? null;
 
-    const chFlowTemp = (hvacFields['0x044c'] !== undefined ? hvacFields['0x044c'] : (hvacFields.field_044c !== undefined ? hvacFields.field_044c : hRow?.field_044c)) ?? null;
-    const chReturnTemp = (hvacFields['0x044d'] !== undefined ? hvacFields['0x044d'] : (hvacFields.field_044d !== undefined ? hvacFields.field_044d : hRow?.field_044d)) ?? null;
-    const setpoint = (hvacFields['0x0450'] !== undefined ? hvacFields['0x0450'] : (hvacFields.field_0450 !== undefined ? hvacFields.field_0450 : hRow?.field_0450)) ?? null;
-    const modulation = (hvacFields['0x0452'] !== undefined ? hvacFields['0x0452'] : (hvacFields.field_0452 !== undefined ? hvacFields.field_0452 : hRow?.field_0452)) ?? null;
-    const flameActive = (hvacFields['0x0457'] !== undefined ? hvacFields['0x0457'] : (hvacFields.field_0457 !== undefined ? hvacFields.field_0457 : hRow?.field_0457)) ?? null;
-    const waterPressure = (hvacFields['0x0460'] !== undefined ? hvacFields['0x0460'] : (hvacFields.field_0460 !== undefined ? hvacFields.field_0460 : hRow?.field_0460)) ?? null;
+    const chFlowTemp = (hvacFields['0x044c'] !== undefined ? hvacFields['0x044c'] : (hvacFields.field_044c !== undefined ? hvacFields.field_044c : (prev?.field_044c ?? hRow?.field_044c))) ?? null;
+    const chReturnTemp = (hvacFields['0x044d'] !== undefined ? hvacFields['0x044d'] : (hvacFields.field_044d !== undefined ? hvacFields.field_044d : (prev?.field_044d ?? hRow?.field_044d))) ?? null;
+    const setpoint = (hvacFields['0x0450'] !== undefined ? hvacFields['0x0450'] : (hvacFields.field_0450 !== undefined ? hvacFields.field_0450 : (prev?.field_0450 ?? hRow?.field_0450))) ?? null;
+    const modulation = (hvacFields['0x0452'] !== undefined ? hvacFields['0x0452'] : (hvacFields.field_0452 !== undefined ? hvacFields.field_0452 : (prev?.field_0452 ?? hRow?.field_0452))) ?? null;
+    const flameActive = (hvacFields['0x0457'] !== undefined ? hvacFields['0x0457'] : (hvacFields.field_0457 !== undefined ? hvacFields.field_0457 : (prev?.field_0457 ?? hRow?.field_0457))) ?? null;
+    const waterPressure = (hvacFields['0x0460'] !== undefined ? hvacFields['0x0460'] : (hvacFields.field_0460 !== undefined ? hvacFields.field_0460 : (prev?.field_0460 ?? hRow?.field_0460))) ?? null;
+    const exhaustTemp = (hvacFields['0x044e'] !== undefined ? hvacFields['0x044e'] : (hvacFields.field_044e !== undefined ? hvacFields.field_044e : (prev?.field_044e ?? hRow?.field_044e))) ?? null;
+    const dhwTemp = (hvacFields['0x045a'] !== undefined ? hvacFields['0x045a'] : (hvacFields.field_045a !== undefined ? hvacFields.field_045a : (prev?.field_045a ?? hRow?.field_045a))) ?? null;
+    const dhwFlowRate = (hvacFields['0x045e'] !== undefined ? hvacFields['0x045e'] : (hvacFields.field_045e !== undefined ? hvacFields.field_045e : (prev?.field_045e ?? hRow?.field_045e))) ?? null;
+    const outsideTemp = (hvacFields['0x044f'] !== undefined ? hvacFields['0x044f'] : (hvacFields.field_044f !== undefined ? hvacFields.field_044f : (prev?.field_044f ?? hRow?.field_044f))) ?? null;
+    const waterPressureBar = (hvacFields['0x0462'] !== undefined ? hvacFields['0x0462'] : (hvacFields.field_0462 !== undefined ? hvacFields.field_0462 : (prev?.field_0462 ?? hRow?.field_0462))) ?? null;
+
+    // Deduplication guard: ignore redundant insert if identical measurement within 15 seconds
+    if (prev && prev.timestamp) {
+        const prevMs = new Date(prev.timestamp).getTime();
+        const nowMs = new Date(now).getTime();
+        const numEq = (a, b) => (a === null || a === undefined) ? (b === null || b === undefined) : Number(a) === Number(b);
+        if (Math.abs(nowMs - prevMs) <= 15000 &&
+            numEq(targetTemp, prev.field_4000) &&
+            numEq(refTemp, prev.field_4040) &&
+            numEq(demand, prev.field_4080) &&
+            numEq(mode, prev.field_2090) &&
+            numEq(dhwMaxFlow, prev.field_2040) &&
+            numEq(chFlowTemp, prev.field_044c) &&
+            numEq(chReturnTemp, prev.field_044d) &&
+            numEq(setpoint, prev.field_0450) &&
+            numEq(modulation, prev.field_0452) &&
+            Boolean(flameActive) === Boolean(prev.field_0457) &&
+            numEq(waterPressure, prev.field_0460) &&
+            numEq(exhaustTemp, prev.field_044e) &&
+            numEq(dhwTemp, prev.field_045a) &&
+            numEq(dhwFlowRate, prev.field_045e) &&
+            numEq(outsideTemp, prev.field_044f) &&
+            numEq(waterPressureBar, prev.field_0462)) {
+            return;
+        }
+    }
 
     await p.execute(
         `INSERT INTO circuit_measurements
          (home_id, circuit_number, timestamp,
           field_4000, field_4040, field_4080, field_2090, field_2040,
-          field_044c, field_044d, field_0450, field_0452, field_0457, field_0460)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          field_044c, field_044d, field_0450, field_0452, field_0457, field_0460,
+          field_044e, field_045a, field_045e, field_044f, field_0462)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             homeId, circuitNumber, now,
             targetTemp, refTemp, demand, mode, dhwMaxFlow,
-            chFlowTemp, chReturnTemp, setpoint, modulation, flameActive, waterPressure
+            chFlowTemp, chReturnTemp, setpoint, modulation, flameActive, waterPressure,
+            exhaustTemp, dhwTemp, dhwFlowRate, outsideTemp, waterPressureBar
         ]
     );
     _log('debug', `circuit_measurements: home=${homeId} circuit=${circuitNumber} target=${targetTemp}°C ref=${refTemp}°C demand=${demand}% flow=${chFlowTemp}°C`);
@@ -732,11 +775,16 @@ async function upsertHeatingSystem(homeId, fields, fullConfigJson = null) {
     const mapping = {
         '0x044c': 'field_044c',
         '0x044d': 'field_044d',
+        '0x044e': 'field_044e',
+        '0x044f': 'field_044f',
         '0x0450': 'field_0450',
         '0x0458': 'field_0458',
         '0x0457': 'field_0457',
         '0x0452': 'field_0452',
+        '0x045a': 'field_045a',
+        '0x045e': 'field_045e',
         '0x0460': 'field_0460',
+        '0x0462': 'field_0462',
         '0x015d': 'field_015d',
         '0x0471': 'field_0471',
         '0x046f': 'field_046f',
