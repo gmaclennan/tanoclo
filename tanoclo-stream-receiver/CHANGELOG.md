@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-24
+
+- chore: update node to v26
+- chore: update node_modules
+- refactor(emulator): update PID tick and schedule profile evaluation
+- feat: Add thermodynamic balancing
+- audit recent changes
+- fix: PID/Advanced heating parameters
+- feat: Improve zone advanced page
+- feat: add valve sensitivity
+- feat: auto flow temp optimization
+- feat: improve emulator
+
 ## [0.5.0] - 2026-10-08
 
 - fix: zone overlays, setpoint handling and bindings
