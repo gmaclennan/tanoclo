@@ -7,7 +7,7 @@
  */
 
 import { SWR_KEYS } from '../../utils/swrKeys';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import useSWR from 'swr';
 import Card from '../common/Card';
 import Button from '../common/Button';
@@ -23,6 +23,8 @@ import { Save, Flame, Thermometer, Wind, Activity, ShieldCheck } from 'lucide-re
 import { useTranslation } from 'react-i18next';
 import logger from '../../utils/logger';
 import { useToast } from '../../context/ToastContext';
+import { HomeContext } from '../../context/HomeContext';
+import { formatLocalTime, parseTimestampToDate } from '../../utils/datetime';
 
 /**
  * @brief Supply temperature optimization settings panel.
@@ -31,6 +33,8 @@ import { useToast } from '../../context/ToastContext';
 export default function SupplyTempSettings({ homeId }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const homeCtx = useContext(HomeContext);
+  const homeTimeZone = homeCtx?.homeInfo?.dateTimeZone;
 
   const { data: optData, error, mutate } = useSWR(
     homeId ? SWR_KEYS.supplyTempOptimization(homeId) : null,
@@ -194,7 +198,7 @@ export default function SupplyTempSettings({ homeId }) {
             </code>
             {autoState.lastOptimized && (
               <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>
-                Updated: {new Date(autoState.lastOptimized).toLocaleTimeString()}
+                Updated: {formatLocalTime(autoState.lastOptimized, homeTimeZone, true)}
               </span>
             )}
           </div>
@@ -304,7 +308,12 @@ export default function SupplyTempSettings({ homeId }) {
               <tbody>
                 {historyList.slice(-10).reverse().map((row, idx) => (
                   <tr key={row.id || idx} style={{ borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.05))' }}>
-                    <td style={{ padding: '0.5rem' }}>{row.timestamp ? row.timestamp.slice(11, 16) : '—'}</td>
+                    <td
+                      style={{ padding: '0.5rem' }}
+                      title={parseTimestampToDate(row.timestamp)?.toLocaleString([], homeTimeZone ? { timeZone: homeTimeZone } : undefined)}
+                    >
+                      {formatLocalTime(row.timestamp, homeTimeZone) || '—'}
+                    </td>
                     <td style={{ padding: '0.5rem', fontWeight: 700, color: 'var(--primary)' }}>
                       {row.computed_flow_temp !== null ? `${row.computed_flow_temp}°C` : '—'}
                     </td>

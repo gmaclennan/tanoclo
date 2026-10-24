@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { formatLocalTime, formatDateISO, minutesToTimeString, timeStringToMinutes } from '../utils/datetime';
+import { formatLocalTime, parseTimestampToDate, formatDateISO, minutesToTimeString, timeStringToMinutes } from '../utils/datetime';
 
 describe('datetime utils', () => {
+  describe('parseTimestampToDate', () => {
+    it('returns null for falsy input', () => {
+      expect(parseTimestampToDate(null)).toBeNull();
+      expect(parseTimestampToDate('')).toBeNull();
+    });
+
+    it('parses SQL UTC datetime string without timezone as UTC', () => {
+      const d = parseTimestampToDate('2026-10-24 19:58:00');
+      expect(d.toISOString()).toBe('2026-10-24T19:58:00.000Z');
+    });
+
+    it('parses ISO string with Z correctly', () => {
+      const d = parseTimestampToDate('2026-10-24T19:58:00.000Z');
+      expect(d.toISOString()).toBe('2026-10-24T19:58:00.000Z');
+    });
+
+    it('returns Date instances as-is', () => {
+      const orig = new Date();
+      expect(parseTimestampToDate(orig)).toBe(orig);
+    });
+  });
+
   describe('formatLocalTime', () => {
     it('returns empty string for falsy input', () => {
       expect(formatLocalTime(null)).toBe('');
@@ -10,11 +32,25 @@ describe('datetime utils', () => {
 
     it('formats a date or timestamp to local time HH:MM', () => {
       const d = new Date('2026-07-13T12:34:56Z');
-      // toLocaleTimeString returns different formats depending on env timezone/locale,
-      // but we can check if it parses correctly and has a colon
       const res = formatLocalTime(d);
       expect(res).toContain(':');
       expect(res.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it('formats with specific timezone', () => {
+      const resAmsterdam = formatLocalTime('2026-10-24 19:58:00', 'Europe/Amsterdam');
+      expect(resAmsterdam).toBe('21:58');
+
+      const resLondon = formatLocalTime('2026-10-24 19:58:00', 'Europe/London');
+      expect(resLondon).toBe('20:58');
+
+      const resUTC = formatLocalTime('2026-10-24 19:58:00', 'UTC');
+      expect(resUTC).toBe('19:58');
+    });
+
+    it('supports includeSeconds parameter', () => {
+      const res = formatLocalTime('2026-10-24 19:58:30', 'UTC', true);
+      expect(res).toBe('19:58:30');
     });
   });
 

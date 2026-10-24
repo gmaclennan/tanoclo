@@ -5,14 +5,47 @@
  */
 
 /**
- * Formats a date string as local time or custom format
+ * Safely parses a timestamp string or Date object into a Date in UTC.
+ * Ensures SQL datetime strings (e.g. 'YYYY-MM-DD HH:mm:ss') without timezone offsets
+ * are treated as UTC rather than ambiguous local time.
+ * @param {string|Date} ts
+ * @returns {Date|null}
+ */
+export function parseTimestampToDate(ts) {
+  if (!ts) return null;
+  if (ts instanceof Date) return ts;
+  if (typeof ts === 'string') {
+    if (!ts.includes('Z') && !ts.includes('+') && !/-\d\d:?\d\d$/.test(ts)) {
+      return new Date(ts.replace(' ', 'T') + 'Z');
+    }
+    return new Date(ts);
+  }
+  return new Date(ts);
+}
+
+/**
+ * Formats a date string as local time or custom timezone format
  * @param {string|Date} dateVal
+ * @param {string} [timeZone]
+ * @param {boolean} [includeSeconds]
  * @returns {string}
  */
-export function formatLocalTime(dateVal) {
+export function formatLocalTime(dateVal, timeZone, includeSeconds = false) {
   if (!dateVal) return '';
-  const d = new Date(dateVal);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const d = parseTimestampToDate(dateVal);
+  if (!d || isNaN(d.getTime())) return '';
+  const options = { hour: '2-digit', minute: '2-digit', hour12: false };
+  if (includeSeconds) {
+    options.second = '2-digit';
+  }
+  if (timeZone) {
+    try {
+      return d.toLocaleTimeString([], { ...options, timeZone });
+    } catch {
+      // Fallback if invalid timeZone
+    }
+  }
+  return d.toLocaleTimeString([], options);
 }
 
 /**
