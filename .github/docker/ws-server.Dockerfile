@@ -3,8 +3,8 @@
 # Build context: repository root
 # Usage: docker buildx build --platform linux/amd64,linux/arm64 -f .github/docker/ws-server.Dockerfile .
 # ==============================================================================
-FROM ghcr.io/home-assistant/amd64-base-debian:latest AS base-amd64
-FROM ghcr.io/home-assistant/aarch64-base-debian:latest AS base-arm64
+FROM ghcr.io/home-assistant/amd64-base-debian:trixie AS base-amd64
+FROM ghcr.io/home-assistant/aarch64-base-debian:trixie AS base-arm64
 
 ARG TARGETARCH
 # hadolint ignore=DL3006
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     build-essential \
     python3 \
-    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_26.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
